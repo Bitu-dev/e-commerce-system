@@ -1,0 +1,221 @@
+services:
+  # ========================================================
+  # 1. PostgreSQL Database Instance
+  # Hosts 3 isolated databases: product_db, order_db, notification_db
+  # ========================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: minicommerce-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./docker/postgres/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 2. Redis Cache
+  # Caches product catalog responses with explicit TTL & invalidation
+  # ========================================================
+  redis:
+    image: redis:7-alpine
+    container_name: minicommerce-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 3. RabbitMQ Message Broker
+  # Asynchronous event bus with management console on 15672
+  # ========================================================
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: minicommerce-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "5672:5672"     # AMQP protocol
+      - "15672:15672"   # Management HTTP UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 4. Keycloak IAM Server (OAuth2 / OIDC with PKCE)
+  # Automatically imports mini-commerce realm, clients, and users
+  # ========================================================
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: minicommerce-keycloak
+    restart: unless-stopped
+    command: start-dev --import-realm
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_HEALTH_ENABLED: "true"
+      KC_METRICS_ENABLED: "true"
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./docker/keycloak/mini-commerce-realm.json:/opt/keycloak/data/import/mini-commerce-realm.json:ro
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/8080 && echo -e 'GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '200 OK' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 5. Product & Inventory Service (Port 8081)
+  # ========================================================
+  product-service:
+    build:
+      context: ./backend/product-service
+      dockerfile: Dockerfile
+    container_name: minicommerce-product-service
+    restart: unless-stopped
+    profiles: ["apps", "all"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/product_db
+      SPRING_DATASOURCE_USERNAME: product_user
+      SPRING_DATASOURCE_PASSWORD: product_pass
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/mini-commerce
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/mini-commerce/protocol/openid-connect/certs
+    ports:
+      - "8081:8081"
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 6. Order Service (Port 8082)
+  # ========================================================
+  order-service:
+    build:
+      context: ./backend/order-service
+      dockerfile: Dockerfile
+    container_name: minicommerce-order-service
+    restart: unless-stopped
+    profiles: ["apps", "all"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/order_db
+      SPRING_DATASOURCE_USERNAME: order_user
+      SPRING_DATASOURCE_PASSWORD: order_pass
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/mini-commerce
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/mini-commerce/protocol/openid-connect/certs
+    ports:
+      - "8082:8082"
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 7. Notification Service (Port 8083)
+  # ========================================================
+  notification-service:
+    build:
+      context: ./backend/notification-service
+      dockerfile: Dockerfile
+    container_name: minicommerce-notification-service
+    restart: unless-stopped
+    profiles: ["apps", "all"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/notification_db
+      SPRING_DATASOURCE_USERNAME: notification_user
+      SPRING_DATASOURCE_PASSWORD: notification_pass
+      SPRING_RABBITMQ_HOST: rabbitmq
+      SPRING_RABBITMQ_PORT: 5672
+      KEYCLOAK_ISSUER_URI: http://keycloak:8080/realms/mini-commerce
+      KEYCLOAK_JWK_SET_URI: http://keycloak:8080/realms/mini-commerce/protocol/openid-connect/certs
+    ports:
+      - "8083:8083"
+    networks:
+      - minicommerce-net
+
+  # ========================================================
+  # 8. Next.js Web Frontend (Port 3000)
+  # ========================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: minicommerce-frontend
+    restart: unless-stopped
+    profiles: ["apps", "all"]
+    depends_on:
+      - product-service
+      - order-service
+      - notification-service
+    environment:
+      NEXT_PUBLIC_PRODUCT_SERVICE_URL: http://localhost:8081
+      NEXT_PUBLIC_ORDER_SERVICE_URL: http://localhost:8082
+      NEXT_PUBLIC_NOTIFICATION_SERVICE_URL: http://localhost:8083
+      NEXT_PUBLIC_KEYCLOAK_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    networks:
+      - minicommerce-net
+
+volumes:
+  postgres_data:
+  redis_data:
+  rabbitmq_data:
+
+networks:
+  minicommerce-net:
+    driver: bridge

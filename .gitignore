@@ -1,0 +1,19 @@
+# Temporary and cache files
+.snowflake/
+.design-cache/
+.vercel/
+
+# Environment variables
+.env*.local
+
+# Common ignores
+node_modules
+.next/
+.DS_Store
+target/
+*.class
+*.jar
+.turbo/
+.idea/
+*.iml
+*.zip

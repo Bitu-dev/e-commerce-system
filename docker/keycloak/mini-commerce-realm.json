@@ -1,0 +1,147 @@
+{
+  "realm": "mini-commerce",
+  "displayName": "Mini Commerce Platform",
+  "displayNameHtml": "<b>Mini Commerce</b> Platform",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "accessTokenLifespan": 1800,
+  "ssoSessionIdleTimeout": 3600,
+  "ssoSessionMaxLifespan": 36000,
+  "roles": {
+    "realm": [
+      {
+        "name": "USER",
+        "description": "Standard Customer role for browsing, ordering, and tracking deliveries"
+      },
+      {
+        "name": "ADMIN",
+        "description": "Store Administrator role for product management, stock control, and fulfillment"
+      }
+    ]
+  },
+  "defaultRoles": [
+    "USER"
+  ],
+  "clients": [
+    {
+      "clientId": "mini-commerce-web",
+      "name": "Mini Commerce Next.js Web Frontend",
+      "description": "Public OpenID Connect client for Next.js browser application using PKCE",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": false,
+      "rootUrl": "http://localhost:3000",
+      "baseUrl": "http://localhost:3000",
+      "redirectUris": [
+        "http://localhost:3000/*",
+        "http://localhost:3000"
+      ],
+      "webOrigins": [
+        "http://localhost:3000",
+        "+"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:3000/*##http://localhost:3000"
+      },
+      "protocolMappers": [
+        {
+          "name": "realm-roles-mapper",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "multivalued": "true",
+            "userinfo.token.claim": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "claim.name": "roles",
+            "jsonType.label": "String"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "bitaniya.user",
+      "enabled": true,
+      "email": "bitaniya.user@minicommerce.local",
+      "emailVerified": true,
+      "firstName": "Bitaniya",
+      "lastName": "User",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "USER"
+      ]
+    },
+    {
+      "username": "bitaniya.admin",
+      "enabled": true,
+      "email": "bitaniya.admin@minicommerce.local",
+      "emailVerified": true,
+      "firstName": "Bitaniya",
+      "lastName": "Admin",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "adminPass2026",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ADMIN"
+      ]
+    },
+    {
+      "username": "customer.demo",
+      "enabled": true,
+      "email": "customer.demo@minicommerce.local",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Customer",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "password123",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "USER"
+      ]
+    },
+    {
+      "username": "admin.demo",
+      "enabled": true,
+      "email": "admin.demo@minicommerce.local",
+      "emailVerified": true,
+      "firstName": "Demo",
+      "lastName": "Administrator",
+      "credentials": [
+        {
+          "type": "password",
+          "value": "adminPass2026",
+          "temporary": false
+        }
+      ],
+      "realmRoles": [
+        "ADMIN"
+      ]
+    }
+  ]
+}
